@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BookNest | Categories</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f3f5fa;
+            color: #1f2937;
+        }
+
+        header {
+            padding: 28px;
+            background: #172554;
+            color: white;
+        }
+
+        header h1 { margin: 0 0 8px; }
+        header p { margin: 0; color: #cbd5e1; }
+
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 16px;
+        }
+
+        nav a { color: white; }
+
+        nav a[aria-current="page"] {
+            font-weight: bold;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+        }
+
+        form {
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 10px;
+            margin: 24px 0;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+        }
+
+        input {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font: inherit;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #1d4ed8;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:disabled { opacity: 0.6; }
+        button[hidden] { display: none; }
+
+        .delete { background: #b91c1c; }
+        .secondary { background: #64748b; }
+        .actions { display: flex; gap: 8px; }
+        .table-container { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        th { background: #f8fafc; }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>BookNest</h1>
+        <p>Bookstore Management System</p>
+
+        <nav aria-label="Main navigation">
+            <a href="/dashboard">Dashboard</a>
+            <a href="/">Books</a>
+            <a href="/categories" aria-current="page">Categories</a>
+            <a href="/customers">Customers</a>
+            <a href="/orders">Orders</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>Categories</h2>
+            <p>Organize your books by genre or subject.</p>
+
+            <form id="category-form">
+                <h3 id="form-title">Add a Category</h3>
+
+                <label for="category-name">Category name</label>
+                <input id="category-name" name="name" required>
+
+                <button type="submit" id="save-button">
+                    Save Category
+                </button>
+
+                <button type="button" id="cancel-button"
+                        class="secondary" hidden>
+                    Cancel Edit
+                </button>
+
+                <p id="message" role="status"></p>
+            </form>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Book Titles</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for category in categories %}
+                        <tr>
+                            <td>{{ category.name }}</td>
+                            <td>{{ category.book_count }}</td>
+                            <td>
+                                <div class="actions">
+                                    <button type="button" class="edit"
+                                            data-id="{{ category.id }}">
+                                        Edit
+                                    </button>
+
+                                    <button type="button" class="delete"
+                                            data-id="{{ category.id }}">
+                                        Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3">No categories yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script id="category-data" type="application/json">
+        {{ categories | tojson }}
+    </script>
+
+    <script>
+        const categories = JSON.parse(
+            document.getElementById("category-data").textContent
+        );
+
+        const form = document.getElementById("category-form");
+        const nameInput = document.getElementById("category-name");
+        const title = document.getElementById("form-title");
+        const saveButton = document.getElementById("save-button");
+        const cancelButton = document.getElementById("cancel-button");
+        const message = document.getElementById("message");
+
+        let editingId = null;
+        let busy = false;
+
+        function setBusy(value) {
+            busy = value;
+            document.querySelectorAll("button").forEach(function (button) {
+                button.disabled = value;
+            });
+        }
+
+        async function sendRequest(url, method, data) {
+            const options = { method: method };
+
+            if (data !== undefined) {
+                options.headers = {
+                    "Content-Type": "application/json"
+                };
+                options.body = JSON.stringify(data);
+            }
+
+            const response = await fetch(url, options);
+            const type = response.headers.get("content-type") || "";
+
+            if (!type.includes("application/json")) {
+                throw new Error(
+                    "Server error (" + response.status +
+                    "). Check the VS Code terminal."
+                );
+            }
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || "Request failed.");
+            }
+
+            return result;
+        }
+
+        document.querySelectorAll(".edit").forEach(function (button) {
+            button.addEventListener("click", function () {
+                if (busy) return;
+
+                const category = categories.find(function (item) {
+                    return item.id === Number(button.dataset.id);
+                });
+
+                editingId = category.id;
+                nameInput.value = category.name;
+                title.textContent = "Edit Category";
+                saveButton.textContent = "Update Category";
+                cancelButton.hidden = false;
+                message.textContent = "";
+                nameInput.focus();
+            });
+        });
+
+        cancelButton.addEventListener("click", function () {
+            editingId = null;
+            form.reset();
+            title.textContent = "Add a Category";
+            saveButton.textContent = "Save Category";
+            cancelButton.hidden = true;
+            message.textContent = "";
+        });
+
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            if (busy) return;
+
+            setBusy(true);
+            message.textContent = "Saving...";
+
+            const editing = editingId !== null;
+            const url = editing
+                ? "/api/categories/" + editingId
+                : "/api/categories";
+
+            try {
+                const result = await sendRequest(
+                    url,
+                    editing ? "PUT" : "POST",
+                    { name: nameInput.value }
+                );
+
+                alert(result.message);
+                window.location.reload();
+            } catch (error) {
+                message.textContent = error.message;
+            } finally {
+                setBusy(false);
+            }
+        });
+
+        document.querySelectorAll(".delete").forEach(function (button) {
+            button.addEventListener("click", async function () {
+                if (busy || !confirm("Delete this category?")) return;
+
+                setBusy(true);
+
+                try {
+                    const result = await sendRequest(
+                        "/api/categories/" + button.dataset.id,
+                        "DELETE"
+                    );
+
+                    alert(result.message);
+                    window.location.reload();
+                } catch (error) {
+                    message.textContent = error.message;
+                } finally {
+                    setBusy(false);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
